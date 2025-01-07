@@ -2,6 +2,9 @@
 
 ## Directory Structure
 ```
+├── notebooks/
+│   ├── exploratory/    # Jupyter notebooks for initial exploration
+│   └── finalized/      # Finalized notebooks ready for presentation
 ├── src/
 │   ├── data/
 │   │   ├── __init__.py            # Makes this folder a module
@@ -9,10 +12,6 @@
 │   │   ├── order_book.py          # Defines the OrderBookData class
 │   │   ├── ohlc_data.py           # Defines the OHLCData class
 │   │   └── utils.py               # Utility functions specific to data (e.g., parsing, validation)
-├── notebooks/
-│   ├── exploratory/    # Jupyter notebooks for initial exploration
-│   └── finalized/      # Finalized notebooks ready for presentation
-├── src/
 │   ├── preprocessing/  # Code for cleaning and transforming data
 │   ├── models/         # Implementation of statistical/ML models
 │   ├── utils/          # Utility functions used across the repository
