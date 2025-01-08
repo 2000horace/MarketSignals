@@ -3,6 +3,10 @@ import matplotlib.pyplot as plt
 
 from ..data import OrderBookData
 
+__all__ = [
+    'plot_snapshot'
+]
+
 def plot_snapshot(df_snapshot: OrderBookData) -> None:
     ask_prices = [df_snapshot[f'askp{i}'].values[0] for i in range(1, 11)]
     ask_quantities = [df_snapshot[f'askq{i}'].values[0] for i in range(1, 11)]
