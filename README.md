@@ -7,11 +7,17 @@
 │   └── finalized/      # Finalized notebooks ready for presentation
 ├── src/
 │   ├── data/
-│   │   ├── __init__.py            # Makes this folder a module
-│   │   ├── base_data.py           # Defines the generic parent class (BaseData)
-│   │   ├── order_book.py          # Defines the OrderBookData class
-│   │   ├── ohlc_data.py           # Defines the OHLCData class
-│   │   └── utils.py               # Utility functions specific to data (e.g., parsing, validation)
+│   │   ├── __init__.py            
+│   │   ├── accessors                       # Folder to contain all external data layers               
+│   │   │   ├── __init__.py        
+│   │   │   ├── generic_accessor.py         # Abstract class for all external data classes
+│   │   │   └── omi_arcticdb.py             # Implementation of GenericAccessor for OMI ArcticDB   
+│   │   ├── internal                        # Folder to contain all internal data layers
+│   │   │   ├── __init__.py
+│   │   │   ├── base_data.py                # Abstract class for all internal data classes
+│   │   │   ├── order_book.py               # Implementation of BaseData for limit order books
+│   │   │   └── bar_data.py                 # Implementation of BaseData for OHLC bar data
+│   │   └── utils.py                        # Utility functions specific to data (e.g., parsing, validation)
 │   ├── preprocessing/  # Code for cleaning and transforming data
 │   ├── models/         # Implementation of statistical/ML models
 │   ├── utils/          # Utility functions used across the repository
