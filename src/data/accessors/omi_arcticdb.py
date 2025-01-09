@@ -127,56 +127,27 @@ class OmiArcticAccessor(GenericAccessor):
         mbp_df.replace(9999999999, np.nan, inplace=True)            # indicates nothing happening on this level
         mbp_df.replace(-9999999999, np.nan, inplace=True)           # indicates nothing happening on this level
 
-        # ------------ 2. Deal with mbp_df ----------------
-        # remove 'ask_price_1' 'ask_size_1' 'bid_price_1' 'bid_size_1'
-        msg_df = msg_df[[
-            'nanoseconds_since_midnight', 
-            'event', 
-            'order_id', 
-            'size', 
-            'price',
-            'direction']]
+        # # ------------ 2. Deal with mbp_df ----------------
+        # # remove 'ask_price_1' 'ask_size_1' 'bid_price_1' 'bid_size_1'
+        # msg_df = msg_df[[
+        #     'nanoseconds_since_midnight', 
+        #     'event', 
+        #     'order_id', 
+        #     'size', 
+        #     'price',
+        #     'direction']]
         
-        # Parse event code to string action code
-        msg_df['event_str'] = msg_df['event'].map(LOBSTER_EVENT_MAP)
+        # # Parse event code to string action code
+        # msg_df['event_str'] = msg_df['event'].map(LOBSTER_EVENT_MAP)
 
-        # Rename columns
-        msg_df.columns = ['time', 'event', 'id', 'q', 'p', 'dir', 'notes']
+        # # Rename columns
+        # msg_df.columns = ['time', 'event', 'id', 'q', 'p', 'dir', 'notes']
 
-        # ------------ 3. Merge bbos and messages ----------------
-        # Merge with trade book, ensure both DataFrames use the same DatetimeIndex
-        # if not mbp_df.index.equals(msg_df.index):
-        #     raise ValueError("Indices of the two DataFrames do not match perfectly.")
-        merged_data = pd.concat([mbp_df, msg_df], axis=1)
+        # # ------------ 3. Merge bbos and messages ----------------
+        # # Merge with trade book, ensure both DataFrames use the same DatetimeIndex
+        # # if not mbp_df.index.equals(msg_df.index):
+        # #     raise ValueError("Indices of the two DataFrames do not match perfectly.")
+        # merged_data = pd.concat([mbp_df, msg_df], axis=1)
 
         # Create and return OrderBookData object
-        return OrderBookData(symbol=symbol, timestamps=merged_data.index, bids=bids, asks=asks)
-
-
-if __name__ == '__main__':
-    from datetime import date
-
-    # 1) CONNECTING TO THE DATA BASE:
-    # First we access the arctic db data base wish to access and create an arctic instance (adb) connected to it:
-    omi_adb = OmiArcticAccessor('lobster')
-
-    # 2) Let's see what libraries (subtypes of data) the lobster data set has:
-    print(omi_adb.get_libraries())
-
-    # check library symbols and metadata
-    omi_adb.get_symbol_versions('lobster-trades', 'MSFT')
-
-    # 3) FETCH THE DATA :
-    ticker = 'MSFT'
-    libs = ['lobster-mbp-10', 'lobster-trades']
-    tickers = [[ticker]] * len(libs)
-    res = omi_adb.get_raw_data(lib_names=libs, tickers=tickers, dt_filter=(date(2020, 1, 8), date(2020, 1, 9)))
-
-    print(list(res.keys()))
-
-    # 4) PARSE INTO INTERNAL FORMAT
-    ob_data = OmiArcticAccessor._parse_mbp_and_trades_to_internal(ticker, 
-                                                                  res.get(('lobster-mbp-10', ticker)),
-                                                                  res.get(('lobster-trades', ticker)))
-    
-    print(ob_data.to_dict())
+        return OrderBookData(symbol=symbol, bbo_df=mbp_df)

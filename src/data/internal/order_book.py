@@ -6,7 +6,7 @@ class OrderBookData(BaseData):
     A class representing order book data, initialized with DataFrames for bids and asks.
     """
 
-    def __init__(self, symbol: str, bbo_df: pd.DataFrame, msg_df: pd.DataFrame = None):
+    def __init__(self, symbol: str, bbo_df: pd.DataFrame, msg_df: pd.DataFrame = pd.DataFrame()):
         """
         Initialize the order book data object.
 
@@ -17,10 +17,9 @@ class OrderBookData(BaseData):
         """
         
         self.bbo_df = bbo_df
-        self.msg_df = None if msg_df.empty else msg_df
+        self.msg_df = msg_df
 
         self._validate_dataframes()
-        self._assign_levels()
 
         super().__init__(symbol, pd.concat([bbo_df, msg_df], axis=1))
 
