@@ -1,6 +1,9 @@
 import pandas as pd
 
 from abc import ABC, abstractmethod
+from typing import Dict, Type
+
+from src.data.utils import InternalDataDictType, DfDictType
 
 __all__ = [
     'GenericAccessor'
@@ -16,9 +19,20 @@ class GenericAccessor(ABC):
     """
 
     @abstractmethod
-    def get_data(self, *args, **kwargs) -> pd.DataFrame:
+    def get_raw_data(self, *args, **kwargs) -> DfDictType:
         """
-        Retrieve data and return it as a pandas DataFrame.
+        Retrieve data and return it as a dictionary of pd.DataFrames indexed by ticker symbol.
+
+        :param args: Positional arguments specific to the accessor implementation.
+        :param kwargs: Keyword arguments specific to the accessor implementation.
+        :return: A pandas DataFrame containing the retrieved data.
+        """
+        raise NotImplementedError
+    
+    @abstractmethod
+    def get_raw_data(self, *args, **kwargs) -> InternalDataDictType:
+        """
+        Retrieve data and return it as a dictionary of pd.DataFrames indexed by ticker symbol.
 
         :param args: Positional arguments specific to the accessor implementation.
         :param kwargs: Keyword arguments specific to the accessor implementation.
