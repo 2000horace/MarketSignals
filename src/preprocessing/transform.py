@@ -2,11 +2,13 @@ import pandas as pd
 import statsmodels.api as sm
 
 from sklearn.base import BaseEstimator, TransformerMixin
-from typing import Dict, Union, List
+from typing import Dict, Union, List, Literal, Tuple
+from src.data.utils import UndefinedKwargDefaultUsedWarning
 
 __all__ = [
     'RollingMean',
-    'LOBMultivariateRegressor'
+    'LOBMultivariateRegressor',
+    'MetaLevels',
 ]
 
 class RollingMean(BaseEstimator, TransformerMixin):
@@ -158,6 +160,142 @@ class LOBMultivariateRegressor(BaseEstimator, TransformerMixin):
     
 
 class MetaLevels(BaseEstimator, TransformerMixin):
-    def __init__():
-        pass
-    
+
+    def __init__(self, mode: Literal['spread'] = 'spread', max_meta_level: int = 10, keep_book_msgs: bool = False, **kwargs):
+        """
+        meta_lvl_width: float
+            The width of each meta level is calculated by meta_width = avg_spread * meta_lvl_width.
+            Subsequent meta levels for ask prices would be [0, meta_width), [meta_width, 2*meta_width)...
+            Levels that fall into the first bucket will have their quantities combined.
+
+        max_meta_level: int
+            if -1, will not impose bound. Otherwise any meta level > max_meta_level will be combined to one value
+
+        keep_book_msgs: bool
+            if True, will keep message updates such as price, quantity, update_type etc.
+        """
+        self.mode = mode
+        self.max_meta_level = max_meta_level
+        self.keep_book_msgs = keep_book_msgs
+
+        self.fit_metadata = None        # Contains any bookkeeping values after transformation
+
+        if self.mode == 'spread':
+            self.meta_lvl_width = kwargs.get('meta_lvl_width', 2)
+            if 'meta_lvl_width' not in kwargs:
+                raise UndefinedKwargDefaultUsedWarning('meta_lvl_width', 2)
+        else:
+            raise ValueError('Unknown mode "{}".'.format(mode))
+
+
+    def fit(self, X: pd.DataFrame, y=None):
+        """
+        Fit method (no action needed for this transformer).
+
+        :param X: The input DataFrame.
+        :param y: Optional target values (ignored).
+        :return: self
+        """
+        return self
+
+    def transform(self, X: pd.DataFrame) -> pd.DataFrame:
+        """
+        Creates meta levels on a limit orderbook and returns the dataframe with the new meta levels.
+
+        :param X: The input DataFrame, with a datetime index.
+        :return: Transformed DataFrame with rolling means.
+        """
+        if self.mode == 'spread':
+            new_df, interval_map = MetaLevels.label_based_on_spread(X, self.meta_lvl_width, self.max_meta_level, self.keep_book_msgs)
+            self.fit_metadata = interval_map
+            return new_df
+        else:
+            raise ValueError('Unknown mode "{}".'.format(self.mode))
+
+    @staticmethod
+    def label_based_on_spread(book: pd.DataFrame, 
+                              meta_lvl_width: float = 2, 
+                              max_meta_level: int = 10, 
+                              keep_book_msgs: bool = False) -> Tuple[pd.DataFrame, Dict[str, pd.Interval]]:
+        """
+        book: pd.DataFrame
+            Dataframe containing the order book. Assume to have columns ask and bid prices up to 10 levels.
+
+        meta_lvl_width: float
+            The width of each meta level is calculated by meta_width = avg_spread * meta_lvl_width.
+            Subsequent meta levels for ask prices would be [0, meta_width), [meta_width, 2*meta_width)...
+            Levels that fall into the first bucket will have their quantities combined.
+
+        max_meta_level: int
+            if -1, will not impose bound. Otherwise any meta level > max_meta_level will be combined to one value
+
+        keep_book_msgs: bool
+            if True, will keep message updates such as price, quantity, update_type etc.
+        """
+
+        book['mid'] = (book['askp1'] + book['bidp1'])/2
+
+        # 1. calculate average spread in bps
+        spread_df = ((book['askp1'] - book['bidp1'])/book['mid'])
+        avg_spread = spread_df.mean()
+
+        # 2. compute meta level width
+        #   Define interval size based on avg_spread and meta_lvl_width
+        interval_size = avg_spread * meta_lvl_width
+
+        #   DataFrame to store results with aggregated meta levels
+        meta_asks, meta_bids = {}, {}
+        meta_name_to_interval = {}
+
+        # 3. map meta levels to intervals and store in dataframe
+        ask_price_cols = [c for c in book.columns if c.startswith('askp')]
+        bid_price_cols = [c for c in book.columns if c.startswith('bidp')]
+        ask_qty_cols = [c for c in book.columns if c.startswith('askq')]
+        bid_qty_cols = [c for c in book.columns if c.startswith('bidq')]
+
+        #   Calculate ask meta level quantities and boundaries
+        ask_distances = book[ask_price_cols].div(book['mid'], axis=0) - 1
+        ask_levels = (ask_distances / interval_size).apply(np.floor).astype(int)
+        ask_levels.rename(columns=dict(zip(ask_price_cols, ask_qty_cols)), inplace=True)
+        for meta_lvl in np.unique(ask_levels.values.flatten()):
+            lvl_name = 'meta_askq{}'.format(meta_lvl+1)
+            meta_asks.update({lvl_name: book[ask_qty_cols].where(ask_levels == meta_lvl).sum(axis=1)})
+            if max_meta_level == -1 or meta_lvl < max_meta_level-1:
+                interval = pd.Interval(left=meta_lvl * interval_size, 
+                                    right=(meta_lvl+1) * interval_size, 
+                                    closed='left')
+                meta_name_to_interval.update({lvl_name: interval})
+            else:
+                interval = pd.Interval(left=meta_lvl * interval_size,
+                                    right=float('inf'),
+                                    closed='left')
+                meta_name_to_interval.update({lvl_name: interval})
+                break
+        
+        del ask_distances, ask_levels
+
+        #   Calculate bid meta level quantities and boundaries
+        bid_distances = 1 - book[bid_price_cols].div(book['mid'], axis=0)
+        bid_levels = (bid_distances / interval_size).apply(np.floor).astype(int)
+        bid_levels.rename(columns=dict(zip(bid_price_cols, bid_qty_cols)), inplace=True)
+        for meta_lvl in np.unique(bid_levels.values.flatten()):
+            lvl_name = 'meta_bidq{}'.format(meta_lvl+1)
+            meta_bids.update({lvl_name: book[bid_qty_cols].where(bid_levels == meta_lvl).sum(axis=1)})
+            if max_meta_level == -1 or meta_lvl < max_meta_level-1:
+                interval = pd.Interval(left= -(meta_lvl+1) * interval_size, 
+                                    right= -meta_lvl * interval_size, 
+                                    closed='right')
+                meta_name_to_interval.update({lvl_name: interval})
+            else:
+                interval = pd.Interval(left=float('-inf'),
+                                    right= -meta_lvl * interval_size,
+                                    closed='right')
+                meta_name_to_interval.update({lvl_name: interval})
+                break
+
+        if keep_book_msgs:
+            # q	p	dir	notes	event_str
+            msg_cols = ['q', 'p', 'dir', 'notes', 'event_str', 'mid']
+            return pd.concat([pd.DataFrame(meta_bids), pd.DataFrame(meta_asks), book[msg_cols]], axis=1), meta_name_to_interval
+        else:
+            return pd.concat([pd.DataFrame(meta_bids), pd.DataFrame(meta_asks)], axis=1), meta_name_to_interval
