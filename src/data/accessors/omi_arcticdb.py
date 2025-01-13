@@ -15,6 +15,14 @@ _ACCESS_KEY = r'ISvPoXxEfZq8R5NrhteF'
 _SECRET_KEY = r'q19I0b8lQvPEwAsJANs3lFUFyVDJpzjpzTTmZTb0'
 
 class OmiArcticAccessor(GenericAccessor):
+    """
+    External-facing layer to scrape LOBSTER L3 data from the RAPID nodes hosted by the Oxford-Man Institute.
+    Server connection is only established if script-runner is connected to the Oxford VPN.
+    
+    Any script that instantiates the class must be ran within a RAPID node, that is, simply connecting to the VPN
+    is not sufficient to establish connection with ArcticDB. Only RAPID accounts (use your own) are verified users
+    to the ArcticDB.
+    """
 
     def __init__(self, db_name: Literal['lobster', 'pinnacle']):
         super().__init__()
