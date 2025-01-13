@@ -3,7 +3,7 @@
 ## Directory Structure
 ```
 ├── notebooks/
-│   ├── exploratory/    # Jupyter notebooks for initial exploration
+│   ├── wip/            # Jupyter notebooks for initial exploration (work in progress notebooks)
 │   └── finalized/      # Finalized notebooks ready for presentation
 ├── src/
 │   ├── data/
