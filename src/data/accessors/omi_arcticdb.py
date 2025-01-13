@@ -106,26 +106,29 @@ class OmiArcticAccessor(GenericAccessor):
         - OrderBookData: Initialized order book object.
         """
         # ------------ 1. Deal with mbp_df ----------------
-        # Extract bid columns
-        bid_columns = [col for col in mbp_df.columns if col.startswith('bid_price') or col.startswith('bid_size')]
-        bids = mbp_df[bid_columns]
-        
         # Rename bid columns to standardized names (bidp1, bidq1, ...)
         bid_rename_map = {f'bid_price_{i}': f'bidp{i}' for i in range(1, 11)}
         bid_rename_map.update({f'bid_size_{i}': f'bidq{i}' for i in range(1, 11)})
-        bids.rename(columns=bid_rename_map, inplace=True)
-
-        # Extract ask columns
-        ask_columns = [col for col in mbp_df.columns if col.startswith('ask_price') or col.startswith('ask_size')]
-        asks = mbp_df[ask_columns]
+        mbp_df.rename(columns=bid_rename_map, inplace=True)
 
         # Rename ask columns to standardized names (askp1, askq1, ...)
         ask_rename_map = {f'ask_price_{i}': f'askp{i}' for i in range(1, 11)}
         ask_rename_map.update({f'ask_size_{i}': f'askq{i}' for i in range(1, 11)})
-        asks.rename(columns=ask_rename_map, inplace=True)
+        mbp_df.rename(columns=ask_rename_map, inplace=True)
 
         mbp_df.replace(9999999999, np.nan, inplace=True)            # indicates nothing happening on this level
         mbp_df.replace(-9999999999, np.nan, inplace=True)           # indicates nothing happening on this level
+
+        # Add string for events
+        mbp_df['event_str'] = mbp_df['event'].map(LOBSTER_EVENT_MAP)
+
+        # Rename other columns
+        mbp_df.rename(columns={
+            'order_id': 'id',
+            'size': 'q',
+            'price': 'p',
+            'direction': 'dir',
+        }, inplace=True)
 
         # # ------------ 2. Deal with mbp_df ----------------
         # # remove 'ask_price_1' 'ask_size_1' 'bid_price_1' 'bid_size_1'

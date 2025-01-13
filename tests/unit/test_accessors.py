@@ -35,3 +35,6 @@ class TestOmiArcticDB(unittest.TestCase):
         ob_data = OmiArcticAccessor._parse_mbp_and_trades_to_internal(TestOmiArcticDB._DEF_TICKER, 
                                                                       res.get(('lobster-mbp-10', TestOmiArcticDB._DEF_TICKER)),
                                                                       res.get(('lobster-trades', TestOmiArcticDB._DEF_TICKER)))
+        
+        print(ob_data.bbo_df.shape)
+        print(ob_data.bbo_df.columns)
