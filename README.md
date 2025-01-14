@@ -18,7 +18,11 @@
 │   │   │   ├── order_book.py               # Implementation of BaseData for limit order books
 │   │   │   └── bar_data.py                 # Implementation of BaseData for OHLC bar data
 │   │   └── utils.py                        # Utility functions specific to data (e.g., parsing, validation)
-│   ├── preprocessing/  # Code for cleaning and transforming data
+│   ├── preprocessing/                      # Code for cleaning and transforming data
+│   │   ├── __init__.py                     
+│   │   ├── clean.py                        # Preprocessing applicable to data frames
+│   │   ├── transform.py                    # Transformations applicable to general financial time series
+│   │   └── lob_transform.py                # Transformations specific for order books fitted by OrderBookData
 │   ├── models/         # Implementation of statistical/ML models
 │   ├── utils/          # Utility functions used across the repository
 │   └── visualizations/ # Scripts for data visualization
