@@ -1,10 +1,11 @@
 import pandas as pd
 
 from sklearn.base import BaseEstimator, TransformerMixin
-from typing import Union
+from typing import Union, List
 
 __all__ = [
-    'Resample'
+    'Resample',
+    'ColumnFilter'
 ]
 
 
@@ -55,3 +56,39 @@ class Resample(BaseEstimator, TransformerMixin):
             # Integer-based resampling
             resampled_df = X.groupby(X.index // self.window_length).agg(self.aggregation_method)
         return resampled_df
+    
+
+class ColumnFilter(BaseEstimator, TransformerMixin):
+
+    def __init__(self, col_filter: Union[List[str], pd.Index], keep: bool = True, lenient_match: bool = True):
+        """
+        Initialize the ColumnFilter transformer.
+
+        Args:
+            col_filter (list of strings or index): 
+                columns to be filtered
+            keep (bool): 
+                - If True, will keep the columns indicated by col_filter
+                - If False, will remove the columns indiated by col_filter
+            lenient_match (bool):
+                - If True, will ignore columns in col_filter that is not present
+                - If False, will throw KeyError if col_filter consists of non-existent column name
+        """
+
+        self.col_filter = list(col_filter)
+        self.keep = keep
+        self.lenient_match = lenient_match
+
+    def fit(self, X: pd.DataFrame, y: pd.DataFrame = None):
+        if self.lenient_match:
+            self.col_filter = [c for c in self.col_filter if c in X.columns]
+
+        if not self.keep:
+            new_filter = [c for c in X.columns if c not in self.col_filter]
+            self.col_filter = new_filter
+            self.keep = True
+
+        return self
+
+    def transform(self, X: pd.DataFrame) -> pd.DataFrame:
+        return X[self.col_filter].copy()
