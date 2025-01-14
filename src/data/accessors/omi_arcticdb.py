@@ -16,7 +16,7 @@ _SECRET_KEY = r'q19I0b8lQvPEwAsJANs3lFUFyVDJpzjpzTTmZTb0'
 
 class OmiArcticAccessor(GenericAccessor):
     """
-    External-facing layer to scrape LOBSTER L3 data from the RAPID nodes hosted by the Oxford-Man Institute.
+    External-facing layer to scrape LOBSTER L3 and pinnacle fundamental data from the RAPID nodes hosted by the Oxford-Man Institute.
     Server connection is only established if script-runner is connected to the Oxford VPN.
     
     Any script that instantiates the class must be ran within a RAPID node, that is, simply connecting to the VPN
@@ -102,7 +102,7 @@ class OmiArcticAccessor(GenericAccessor):
     def get_data(self, tickers: List[str], col_filter: List[str] = None, dt_filter: DateRange = None) -> InternalDataDictType:
         pass
 
-    def _parse_mbp_and_trades_to_internal(symbol: str, mbp_df: pd.DataFrame, msg_df: pd.DataFrame) -> InternalDataDictType:
+    def _parse_mbp_and_trades_to_internal(symbol: str, mbp_df: pd.DataFrame, msg_df: pd.DataFrame = None) -> InternalDataDictType:
         """
         Parse raw data into an OrderBookData object.
 
