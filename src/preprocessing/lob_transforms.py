@@ -10,6 +10,7 @@ __all__ = [
     'LOBMultivariateRegressor',
     'MetaLevelsBySpread',
     'MetaLevelsByVolume',
+    'MetaLevelsByPriceImpact'
 ]
 
 class LOBMultivariateRegressor(BaseEstimator, TransformerMixin):
@@ -286,7 +287,7 @@ class MetaLevelsByVolume(BaseEstimator, TransformerMixin):
             # Compute cumulative volume
             df_long['cum_qty'] = df_long.groupby('nanoseconds_since_midnight')['qty'].cumsum()
         
-            # Determine meta-level breakpoints
+            # Determine meta-level breakpoints (assign 0, 1, 2, 3... groupings)
             df_long['meta_level'] = df_long.groupby('nanoseconds_since_midnight')['cum_qty'].transform(
                 lambda x: pd.qcut(x, self.max_meta_levels, labels=False, duplicates='drop')
             )
@@ -327,3 +328,121 @@ class MetaLevelsByVolume(BaseEstimator, TransformerMixin):
         transformed_df.index = X.index.copy()
         
         return transformed_df
+    
+
+class MetaLevelsByPriceImpact(BaseEstimator, TransformerMixin):
+
+    def __init__(self, n_meta_levels: int = -1, manual_thr: List[float] = None, keep_original: bool = False):
+        self.n_meta_levels = n_meta_levels
+        self.manual_thr = manual_thr
+        
+        if self.n_meta_levels < 0:
+            assert self.manual_thr is not None, "Must specify n_meta_levels or provide manual_thr, got neither."
+        if manual_thr is not None:
+            self.n_meta_levels = len(manual_thr)
+
+        self.keep_original = keep_original
+
+    def fit(self, X: pd.DataFrame, y: pd.DataFrame = None):
+        # No fitting required
+        return self
+    
+    def _assign_meta_level_quantile(self, group) -> pd.DataFrame:
+        # Determine price impact thresholds using quantiles, returns a dataframe of group assignments
+        if group['cum_price_impact'].max() == 0:
+            group['meta_level'] = 0
+        else:
+            quantiles = group['cum_price_impact'].quantile([i / self.n_meta_levels for i in range(1, self.n_meta_levels + 1)])
+            thresholds = quantiles.tolist()
+            group['meta_level'] = 0
+            for i in range(1, self.n_meta_levels + 1):
+                group.loc[group['cum_price_impact'] >= thresholds[i-1], 'meta_level'] = i
+        return group
+
+    def transform(self, X: pd.DataFrame) -> pd.DataFrame:
+        
+        def process_side(df, side, price_prefix, qty_prefix, manual_thr):
+            # Function to process one side (ask or bid)
+            levels = []
+            for i in range(1, 11):
+                level_df = df[['nanoseconds_since_midnight']].copy()
+                level_df['level'] = i
+                level_df['price'] = df[f"{price_prefix}{i}"]
+                level_df['qty'] = df[f"{qty_prefix}{i}"]
+                levels.append(level_df)
+            levels_df = pd.concat(levels, ignore_index=True)
+
+            # Sort levels by price
+            if side == 'ask':
+                levels_df = levels_df.sort_values(by=['nanoseconds_since_midnight', 'price'])
+            else:
+                levels_df = levels_df.sort_values(by=['nanoseconds_since_midnight', 'price'], ascending=False)
+            
+            # Calculate individual price impacts
+            levels_df['price_next'] = levels_df.groupby('nanoseconds_since_midnight')['price'].shift(-1)
+            if side == 'ask':
+                levels_df['price_impact'] = levels_df['price_next'] - levels_df['price']
+            else:
+                levels_df['price_impact'] = levels_df['price'] - levels_df['price_next']
+            
+            # Handle NaNs in price_next
+            levels_df['price_impact'] = levels_df['price_impact'].fillna(0)
+
+            # Calculate cumulative price impact
+            levels_df['cum_price_impact'] = levels_df.groupby('nanoseconds_since_midnight')['price_impact'].cumsum()
+
+            # Assign meta levels based on manual thresholds or quantiles
+            if manual_thr is not None:
+                # Ensure thresholds are sorted
+                manual_thr_sorted = sorted(manual_thr)
+
+                # Define bins including all possible cumulative impacts
+                bins = [0] + manual_thr_sorted + [levels_df['cum_price_impact'].max()]
+                labels = range(1, len(bins))
+                levels_df['meta_level'] = pd.cut(levels_df['cum_price_impact'], bins=bins, labels=labels, right=False)
+
+                # Fill NaNs with the highest meta level
+                levels_df['meta_level'] = levels_df['meta_level'].fillna(max(labels))
+            else:
+                levels_df = levels_df.groupby('nanoseconds_since_midnight').apply(self._assign_meta_level_quantile)
+            
+            def _aggregate_meta(group: pd.DataFrame) -> pd.DataFrame:
+                # Aggregate price and quantity for each meta-level
+                meta_dfs = []
+                for meta in range(1, self.n_meta_levels + 1):
+                    meta_group = group[group['meta_level'] == meta]
+                    if not meta_group.empty:
+                        total_qty = meta_group['qty'].sum()
+                        if total_qty > 0:
+                            weighted_price = (meta_group['price'] * meta_group['qty']).sum() / total_qty
+                        else:
+                            weighted_price = 0
+                        meta_df = pd.DataFrame({
+                            'nanoseconds_since_midnight': [group.name],
+                            f'meta_{side}p{meta}': [weighted_price],
+                            f'meta_{side}q{meta}': [total_qty]
+                        })
+                        meta_dfs.append(meta_df)
+                return pd.concat(meta_dfs, ignore_index=True)
+            
+            meta_df = levels_df.groupby('nanoseconds_since_midnight').apply(_aggregate_meta).reset_index(drop=True)
+            return meta_df
+
+        # Process ask and bid sides
+        ask_meta = process_side(X, 'ask', 'askp', 'askq', self.manual_thr)
+        bid_meta = process_side(X, 'bid', 'bidp', 'bidq', self.manual_thr)
+
+        # forward/backward fill based on nanoseconds_since_midnight
+        ask_meta = ask_meta.groupby('nanoseconds_since_midnight').first()
+        bid_meta = bid_meta.groupby('nanoseconds_since_midnight').first()
+
+        # Combine ask and bid meta-levels
+        combined_meta = ask_meta.merge(bid_meta, on='nanoseconds_since_midnight', how='outer').reset_index()
+
+        if self.keep_original:
+            # Merge back into the original DataFrame
+            combined_meta = X.merge(combined_meta, on='nanoseconds_since_midnight', how='left')
+
+        combined_meta.index = X.index
+        
+        return combined_meta
